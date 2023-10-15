@@ -1,0 +1,2 @@
+pandas_ta
+python-binance
