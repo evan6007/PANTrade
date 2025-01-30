@@ -194,6 +194,7 @@ while 1:
                 #止損
                 bin_client.futures_create_order(symbol=symbol,positionSide='SHORT',side='BUY',type ='STOP_MARKET',quantity = short_quantity,
                                                 stopPrice=round(float(high30),2),workingType='MARK_PRICE')#precision=3
+                data = requests.post(url, headers=headers, data={'message':f'放空下單買點:{now_close}'})
             else:
                 data = requests.post(url, headers=headers, data={'message':f'這單沒緣分，不下了'})
 
@@ -236,13 +237,45 @@ while 1:
                             result = bin_client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
                     break
                 time.sleep(1)
+    
+    time.sleep(10)
+    # 遍歷所有未執行訂單，尋找放空的止損/止盈訂單並取消它們
+    Long_have_position , Short_have_position = check_position(bin_client)
+    if (Short_have_position == False) and (notified_for_ma_cross70==True):
+        found_rsi_above_70,notified_for_rsi70,notified_for_ma_cross70 = False,False,False 
+        open_orders = bin_client.futures_get_open_orders(symbol=symbol)
+        for order in open_orders:
+            if order['positionSide'] == 'SHORT' and (order['type'] == 'STOP_MARKET'):
+                result = bin_client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
+                data = requests.post(url, headers=headers, data={'message':f'放空止盈，清空狀態'})
+            if order['positionSide'] == 'SHORT' and (order['type'] == 'TAKE_PROFIT_MARKET'):
+                result = bin_client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
+                data = requests.post(url, headers=headers, data={'message':f'放空止損，清空狀態'})
+
+    if (Long_have_position == False) and (notified_for_ma_cross30==True):
+        found_rsi_below_30,notified_for_rsi30,notified_for_ma_cross30 = False,False,False 
+        open_orders = bin_client.futures_get_open_orders(symbol=symbol)
+        for order in open_orders:
+            if order['positionSide'] == 'LONG' and (order['type'] == 'STOP_MARKET'):
+                result = bin_client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
+                data = requests.post(url, headers=headers, data={'message':f'做多止盈，清空狀態'})
+            if order['positionSide'] == 'LONG' and (order['type'] == 'TAKE_PROFIT_MARKET'):
+                result = bin_client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
+                data = requests.post(url, headers=headers, data={'message':f'做多止損，清空狀態'})
+
+
 
     nowtimestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) 
     print(f"時間: {nowtimestamp}")
+    print(found_rsi_below_30,notified_for_rsi30,notified_for_ma_cross30)
+    print(found_rsi_above_70,notified_for_rsi70,notified_for_ma_cross70)
+    print(Long_have_position , Short_have_position)
     # print(found_rsi_above_70,notified_for_rsi70,notified_for_ma_cross70)
     # print(found_rsi_below_30,notified_for_rsi30,notified_for_ma_cross30)
     # print(f"| now_open:       {now_open:>10.2f} | now_close:        {now_close:>10.2f} | high30:{high30:>17.2f} | low30:{low30:>17.2f} |")
     # print(f"| second_last_5MA:{second_last_5MA:>10.2f} | second_last_10MA: {second_last_10MA:>10.2f} | second_last_rsi: {second_last_rsi:>7.2f} |")
     # print(f"| now_5MA: {now_5MA:>17.2f} | now_10MA:  {now_10MA:>17.2f} | Now_rsi:      {now_rsi:>10.2f} |")
 
-    time.sleep(60)
+    time.sleep(50)
+
+
