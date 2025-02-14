@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 import traceback
 import requests
 import math
-
+from binance.exceptions import BinanceAPIException
+from decimal import Decimal, ROUND_DOWN
 #line
 line_url = 'https://notify-api.line.me/api/notify'
 line_token = '0RxE9s8aOfLBoPOnGwiA3MQxEQBt2rZcpxaRRgvZmPh'
@@ -79,10 +80,10 @@ def adjust_quantity(symbol, quantity):
         if market['symbol'] == symbol:
             lot_size = next((f for f in market['filters'] if f['filterType'] == 'LOT_SIZE'), None)
             if lot_size:
-                min_qty = float(lot_size['minQty'])
-                step_size = float(lot_size['stepSize'])
-                adjusted_quantity = math.floor(quantity / step_size) * step_size
-                return max(adjusted_quantity, min_qty)
+                min_qty = Decimal(lot_size['minQty'])
+                step_size = Decimal(lot_size['stepSize'])
+                adjusted_quantity = (Decimal(quantity) // step_size) * step_size  # 向下取整符合 stepSize
+                return float(max(adjusted_quantity, min_qty).quantize(step_size, rounding=ROUND_DOWN))
     raise ValueError(f"無法獲取 {symbol} 交易規則")
 
 # **等待訂單成交（無限重試 + API 連線錯誤處理）**
@@ -138,6 +139,9 @@ while True:
             quantity = adjust_quantity(f"{asset}USDT", quantity)
 
             print(f"🔄 建立套利倉位，交易數量: {quantity}")
+            # **發送 LINE 通知**                
+            send_line_message(f"✅ 溢價 {premium:.2%}，執行套利！\n"
+                              f"🔄 建立套利倉位，交易數量: {quantity}")
 
             # **下現貨買入單**
             order_spot = client.order_limit_buy(
@@ -177,6 +181,9 @@ while True:
                 # **當溢價 = -0.3% 時，執行平倉**
                 if premium <= exit_premium:
                     print(f"🎯 溢價 {premium:.2%}，執行套利平倉！")
+                    # **發送 LINE 通知**                
+                    send_line_message(f"🎯 溢價 {premium:.2%}，執行套利平倉")
+
 
                     # **現貨賣出**
                     order_spot = client.order_limit_sell(
@@ -208,7 +215,9 @@ while True:
                     usdt_balance, futures_usdt_balance = fetch_balances()
                     # 計算總 USDT 餘額
                     total_usdt_balance = usdt_balance + futures_usdt_balance
-
+                    # 計算報酬率
+                    initial_capital = 200  # 初始資本 200 USDT
+                    profit_percentage = ((total_usdt_balance - initial_capital) / initial_capital) * 100
                     # 發送 LINE 訊息，新增「總計 USDT 餘額」
                     send_line_message(f"✅ 套利完成！\n"
                                     f"LTC 現貨賣出價: {spot_price}\n"
@@ -216,14 +225,15 @@ while True:
                                     f"交易數量: {quantity}\n"
                                     f"💰 現貨 USDT 餘額: {usdt_balance:.2f}\n"
                                     f"💰 合約 USDT 餘額: {futures_usdt_balance:.2f}\n"
-                                    f"💰 **總計 USDT 餘額: {total_usdt_balance:.2f}**")
+                                    f"💰 **總計 USDT 餘額: {total_usdt_balance:.2f}**\n"
+                                    f"📈 **套利報酬: {profit_percentage:.2f}%**")
                     break
 
-                time.sleep(2)  # 每 2 秒檢查一次
+                time.sleep(1.5)  # 每 2 秒檢查一次
         except BinanceAPIException as e:
             print(f"❌ 下單失敗: {e}")
             send_line_message(f"❌ 下單失敗: {e}")
         except Exception as e:
             print(f"❌ 未知錯誤: {e}")
             send_line_message(f"❌ 未知錯誤: {traceback.format_exc()}")
-    time.sleep(2)  # 每 2 秒檢查一次
+    time.sleep(1.5)  # 每 2 秒檢查一次
