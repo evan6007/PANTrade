@@ -73,6 +73,18 @@ def calculate_quantity(balance, price):
     quantity = allocation / price * (1 - spot_fee)  # 扣除手續費
     return round(quantity, 6)  # Binance 支持最多 6 位小數
 
+# **調整價格以符合 Binance 交易規則**
+def adjust_price(symbol, price):
+    exchange_info = client.get_exchange_info()
+    for market in exchange_info['symbols']:
+        if market['symbol'] == symbol:
+            price_filter = next((f for f in market['filters'] if f['filterType'] == 'PRICE_FILTER'), None)
+            if price_filter:
+                tick_size = Decimal(price_filter['tickSize'])
+                adjusted_price = (Decimal(price) // tick_size) * tick_size  # 向下取整符合 tickSize
+                return float(adjusted_price.quantize(tick_size, rounding=ROUND_DOWN))
+    raise ValueError(f"無法獲取 {symbol} 交易規則")
+
 # 調整交易數量以符合 Binance 交易規則
 def adjust_quantity(symbol, quantity):
     exchange_info = client.get_exchange_info()
@@ -112,6 +124,15 @@ def wait_for_orders(spot_symbol, spot_order_id, futures_symbol, futures_order_id
         time.sleep(2)
 
 
+def calculate_exit_prices(spot_price, future_price,premium,target_premium):
+    """計算讓溢價從 -0.4% 回到 -0.3% 的新的現貨與合約價格"""
+    x = (1 + target_premium) / (1 - premium) - 1
+    
+    spot_price_new = spot_price * (1 - x)  # 現貨下降
+    future_price_new = future_price * (1 + x)  # 合約上升
+    
+    return spot_price_new, future_price_new
+
 # **主交易邏輯**
 while True:
     # 取得最新價格
@@ -121,8 +142,8 @@ while True:
 
 
 
-    # **當溢價 = 0% 時，建立套利倉位**
-    if premium == 0.0:
+    # **當溢價 > 0.1% 時，建立套利倉位**
+    if premium >= 0.001:
         print(f"✅ 溢價 {premium:.2%}，執行套利！")
 
 
@@ -134,8 +155,13 @@ while True:
             account_info = client.get_account()
             usdt_balance = float(next(item for item in account_info['balances'] if item['asset'] == 'USDT')['free'])
 
+            # **計算開倉價格**
+            entry_price = (spot_price + future_price) / 2
+            entry_price = adjust_price(f"{asset}USDT", entry_price)  # 確保價格符合 Binance 規則
+
+
             # 計算交易數量
-            quantity = calculate_quantity(usdt_balance, spot_price)
+            quantity = calculate_quantity(usdt_balance, entry_price)
             quantity = adjust_quantity(f"{asset}USDT", quantity)
 
             print(f"🔄 建立套利倉位，交易數量: {quantity}")
@@ -147,7 +173,7 @@ while True:
             order_spot = client.order_limit_buy(
                 symbol=f"{asset}USDT",
                 quantity=quantity,
-                price=spot_price,
+                price=entry_price,
                 timeInForce="GTC"
             )
             spot_order_id = order_spot["orderId"]
@@ -158,7 +184,7 @@ while True:
                 side="SELL",
                 type="LIMIT",
                 quantity=quantity,
-                price=future_price,
+                price=entry_price,
                 timeInForce="GTC",
                 positionSide="SHORT"
             )
@@ -172,24 +198,27 @@ while True:
             line_message = f"✅ 成功建立套利倉位\nLTC 現貨買入價: {spot_price}\nLTC 期貨做空價: {future_price}\n交易數量: {quantity}"
             send_line_message(line_message)
 
-            # **等待溢價達到 -0.3%**
+            #開始找平倉機會
             while True:
                 spot_price, future_price = fetch_prices()
                 premium = (future_price - spot_price) / spot_price
                 print(f"📊 監控溢價: {premium:.2%}")
 
-                # **當溢價 = -0.3% 時，執行平倉**
+                # **當溢價 = -0.4% 時，執行平倉**
                 if premium <= exit_premium:
                     print(f"🎯 溢價 {premium:.2%}，執行套利平倉！")
-                    # **發送 LINE 通知**                
-                    send_line_message(f"🎯 溢價 {premium:.2%}，執行套利平倉")
 
+                    # 計算新的現貨與合約平倉價格
+                    spot_price_new, future_price_new = calculate_exit_prices(spot_price, future_price,premium,-0.003) #用-0.3%價格去平倉
+                    # **發送 LINE 通知**
+                    line_message = f"🎯 溢價 {premium:.2%}，執行套利平倉\n LTC 現貨限單: {spot_price_new}\nLTC 期貨限單: {future_price_new}"
+                    send_line_message(line_message)
 
                     # **現貨賣出**
                     order_spot = client.order_limit_sell(
                         symbol=f"{asset}USDT",
                         quantity=quantity,
-                        price=spot_price,
+                        price=spot_price_new,
                         timeInForce="GTC"
                     )
                     spot_order_id = order_spot["orderId"]
@@ -200,7 +229,7 @@ while True:
                         side="BUY",
                         type="LIMIT",
                         quantity=quantity,
-                        price=future_price,
+                        price=future_price_new,
                         timeInForce="GTC",
                         positionSide="SHORT"
                     )
@@ -220,8 +249,8 @@ while True:
                     profit_percentage = ((total_usdt_balance - initial_capital) / initial_capital) * 100
                     # 發送 LINE 訊息，新增「總計 USDT 餘額」
                     send_line_message(f"✅ 套利完成！\n"
-                                    f"LTC 現貨賣出價: {spot_price}\n"
-                                    f"LTC 期貨回補價: {future_price}\n"
+                                    f"LTC 現貨賣出價: {spot_price_new}\n"
+                                    f"LTC 期貨回補價: {future_price_new}\n"
                                     f"交易數量: {quantity}\n"
                                     f"💰 現貨 USDT 餘額: {usdt_balance:.2f}\n"
                                     f"💰 合約 USDT 餘額: {futures_usdt_balance:.2f}\n"
@@ -229,11 +258,11 @@ while True:
                                     f"📈 **套利報酬: {profit_percentage:.2f}%**")
                     break
 
-                time.sleep(1.5)  # 每 2 秒檢查一次
+                time.sleep(0.5)  # 每 2 秒檢查一次
         except BinanceAPIException as e:
             print(f"❌ 下單失敗: {e}")
             send_line_message(f"❌ 下單失敗: {e}")
         except Exception as e:
             print(f"❌ 未知錯誤: {e}")
             send_line_message(f"❌ 未知錯誤: {traceback.format_exc()}")
-    time.sleep(1.5)  # 每 2 秒檢查一次
+    time.sleep(0.5)  # 每 2 秒檢查一次
