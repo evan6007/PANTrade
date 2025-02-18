@@ -83,7 +83,10 @@ def adjust_price(symbol, price):
                 tick_size = Decimal(price_filter['tickSize'])
                 adjusted_price = (Decimal(price) // tick_size) * tick_size  # 向下取整符合 tickSize
                 return float(adjusted_price.quantize(tick_size, rounding=ROUND_DOWN))
-    raise ValueError(f"無法獲取 {symbol} 交易規則")
+    # 先發送 LINE 通知，再拋出錯誤
+    error_message = f"⚠️ 無法獲取 {symbol} adjust_price"
+    send_line_message(error_message)
+    raise ValueError(error_message)
 
 # 調整交易數量以符合 Binance 交易規則
 def adjust_quantity(symbol, quantity):
@@ -96,7 +99,11 @@ def adjust_quantity(symbol, quantity):
                 step_size = Decimal(lot_size['stepSize'])
                 adjusted_quantity = (Decimal(quantity) // step_size) * step_size  # 向下取整符合 stepSize
                 return float(max(adjusted_quantity, min_qty).quantize(step_size, rounding=ROUND_DOWN))
-    raise ValueError(f"無法獲取 {symbol} 交易規則")
+
+    # 先發送 LINE 通知，再拋出錯誤
+    error_message = f"⚠️ 無法獲取 {symbol} adjust_quantity"
+    send_line_message(error_message)
+    raise ValueError(error_message)
 
 # **等待訂單成交（無限重試 + API 連線錯誤處理）**
 def wait_for_orders(spot_symbol, spot_order_id, futures_symbol, futures_order_id):
@@ -124,13 +131,18 @@ def wait_for_orders(spot_symbol, spot_order_id, futures_symbol, futures_order_id
         time.sleep(2)
 
 
-def calculate_exit_prices(spot_price, future_price,premium,target_premium):
+def calculate_exit_prices(asset,spot_price, future_price,premium,target_premium):
     """計算讓溢價從 -0.4% 回到 -0.3% 的新的現貨與合約價格"""
     x = (1 + target_premium) / (1 - premium) - 1
     
     spot_price_new = spot_price * (1 - x)  # 現貨下降
     future_price_new = future_price * (1 + x)  # 合約上升
     
+    # 確保價格符合 Binance 交易規則
+    spot_price_new = adjust_price(f"{asset}USDT", spot_price_new)
+    future_price_new = adjust_price(f"{asset}USDT", future_price_new)
+
+
     return spot_price_new, future_price_new
 
 # **主交易邏輯**
@@ -209,7 +221,7 @@ while True:
                     print(f"🎯 溢價 {premium:.2%}，執行套利平倉！")
 
                     # 計算新的現貨與合約平倉價格
-                    spot_price_new, future_price_new = calculate_exit_prices(spot_price, future_price,premium,-0.003) #用-0.3%價格去平倉
+                    spot_price_new, future_price_new = calculate_exit_prices(asset,spot_price, future_price,premium,-0.003) #用-0.3%價格去平倉
                     # **發送 LINE 通知**
                     line_message = f"🎯 溢價 {premium:.2%}，執行套利平倉\n LTC 現貨限單: {spot_price_new}\nLTC 期貨限單: {future_price_new}"
                     send_line_message(line_message)
