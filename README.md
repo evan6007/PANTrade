@@ -8,3 +8,9 @@ https://www.youtube.com/watch?v=elkL1OF9fxI
 sudo apt upgrade
 sudo apt update
 
+sudo apt install git
+載一下這個git
+sudo apt install tmux
+
+pip install pandas binance-connector requests
+
