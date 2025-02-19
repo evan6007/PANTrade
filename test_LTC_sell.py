@@ -7,6 +7,10 @@ import requests
 import math
 from binance.exceptions import BinanceAPIException
 from decimal import Decimal, ROUND_DOWN
+
+#source myenv/bin/activate
+#deactivate
+
 #line
 line_url = 'https://notify-api.line.me/api/notify'
 line_token = '0RxE9s8aOfLBoPOnGwiA3MQxEQBt2rZcpxaRRgvZmPh'
@@ -26,7 +30,9 @@ spot_fee = 0.001  # 現貨手續費 0.1%
 
 # 發送 LINE 訊息
 def send_line_message(message):
-    payload = {'message': message}
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {'message': f"[{timestamp}]\n{message}"}
+
     requests.post(line_url, headers=headers, data=payload)
 
 # 取得最新價格（增加重試機制）
@@ -133,10 +139,15 @@ def wait_for_orders(spot_symbol, spot_order_id, futures_symbol, futures_order_id
 
 def calculate_exit_prices(asset,spot_price, future_price,premium,target_premium):
     """計算讓溢價從 -0.4% 回到 -0.3% 的新的現貨與合約價格"""
-    x = (1 + target_premium) / (1 - premium) - 1
+    # x = (1 + target_premium) / (1 - premium) - 1
     
-    spot_price_new = spot_price * (1 - x)  # 現貨下降
-    future_price_new = future_price * (1 + x)  # 合約上升
+    # spot_price_new = spot_price * (1 - x)  # 現貨下降
+    # future_price_new = future_price * (1 + x)  # 合約上升
+    mid = (future_price+spot_price)/2
+    spot_price_new = mid * (1.0015)  # 現貨下降
+    print(sn)
+    future_price_new = mid * (0.9985)  # 合約上升
+    print(future_price_new)
     
     # 確保價格符合 Binance 交易規則
     spot_price_new = adjust_price(f"{asset}USDT", spot_price_new)
@@ -223,7 +234,11 @@ while True:
                     # 計算新的現貨與合約平倉價格
                     spot_price_new, future_price_new = calculate_exit_prices(asset,spot_price, future_price,premium,-0.003) #用-0.3%價格去平倉
                     # **發送 LINE 通知**
-                    line_message = f"🎯 溢價 {premium:.2%}，執行套利平倉\n LTC 現貨限單: {spot_price_new}\nLTC 期貨限單: {future_price_new}"
+                    line_message = f"🎯 溢價 {premium:.2%}，執行套利平倉\n\
+                    LTC 原始現貨限單: {spot_price}\n\
+                    LTC 原始期貨限單: {future_price}\
+                    LTC 現貨限單: {spot_price_new}\n\
+                    LTC 期貨限單: {future_price_new}"
                     send_line_message(line_message)
 
                     # **現貨賣出**
