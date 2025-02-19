@@ -145,9 +145,7 @@ def calculate_exit_prices(asset,spot_price, future_price,premium,target_premium)
     # future_price_new = future_price * (1 + x)  # 合約上升
     mid = (future_price+spot_price)/2
     spot_price_new = mid * (1.0015)  # 現貨下降
-    print(sn)
     future_price_new = mid * (0.9985)  # 合約上升
-    print(future_price_new)
     
     # 確保價格符合 Binance 交易規則
     spot_price_new = adjust_price(f"{asset}USDT", spot_price_new)
