@@ -10,6 +10,8 @@ from decimal import Decimal, ROUND_DOWN
 
 #source myenv/bin/activate
 #deactivate
+#tmux attach -t 0
+
 
 #line
 line_url = 'https://notify-api.line.me/api/notify'
@@ -25,7 +27,7 @@ client = Client(api_key, api_secret)
 # 設定交易參數
 asset = "LTC"
 entry_premium = 0.0  # 當溢價 = 0% 時進場
-exit_premium = -0.003  # 當溢價 = -0.3% 時平倉
+exit_premium = -0.004  # 當溢價 = -0.3% 時平倉
 spot_fee = 0.001  # 現貨手續費 0.1%
 
 # 發送 LINE 訊息
@@ -164,7 +166,7 @@ while True:
 
 
     # **當溢價 > 0.1% 時，建立套利倉位**
-    if premium >= 0.001:
+    if premium == 0.0:
         print(f"✅ 溢價 {premium:.2%}，執行套利！")
 
 
@@ -177,8 +179,10 @@ while True:
             usdt_balance = float(next(item for item in account_info['balances'] if item['asset'] == 'USDT')['free'])
 
             # **計算開倉價格**
-            entry_price = (spot_price + future_price) / 2
-            entry_price = adjust_price(f"{asset}USDT", entry_price)  # 確保價格符合 Binance 規則
+            # entry_price = (spot_price + future_price) / 2
+            # entry_price = adjust_price(f"{asset}USDT", entry_price)  # 確保價格符合 Binance 規則
+            #暫時用spot_price當entry
+            entry_price = spot_price
 
 
             # 計算交易數量
@@ -232,12 +236,11 @@ while True:
                     # 計算新的現貨與合約平倉價格
                     spot_price_new, future_price_new = calculate_exit_prices(asset,spot_price, future_price,premium,-0.003) #用-0.3%價格去平倉
                     # **發送 LINE 通知**
-                    line_message = f"🎯 溢價 {premium:.2%}，執行套利平倉\n\
-                    LTC 原始現貨限單: {spot_price}\n\
-                    LTC 原始期貨限單: {future_price}\
-                    LTC 現貨限單: {spot_price_new}\n\
-                    LTC 期貨限單: {future_price_new}"
-                    send_line_message(line_message)
+                    send_line_message(f"🎯 溢價 {premium:.2%}，執行套利平倉\n"
+                    f"LTC 原始現貨限單: {spot_price}\n"
+                    f"LTC 原始期貨限單: {future_price}\n"
+                    f"LTC 現貨限單: {spot_price_new}\n"
+                    f"LTC 期貨限單: {future_price_new}\n")
 
                     # **現貨賣出**
                     order_spot = client.order_limit_sell(
