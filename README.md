@@ -71,6 +71,8 @@ tmux  # 啟動 Tmux
     ```sh
     python your_script.py  # 替換成你的主程式
     ```
+4. **把API KEY存IP**
+   去幣安 把IP給ＡＰＩ的權限
 
 這樣你的環境就設定完成了！🚀
 
