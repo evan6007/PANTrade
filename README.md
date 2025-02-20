@@ -33,6 +33,7 @@ sudo apt install python3-pip -y
 
 ```sh
 sudo apt install -y python3 python3-pip
+sudo apt-get install python3.12-venv
 python3 -m venv myenv  # 創建虛擬環境
 source myenv/bin/activate  # 啟動虛擬環境
 ```
