@@ -1,3 +1,4 @@
+# 🍞 PAN (Premium Arbitrage Network)
 ![Premium Bread](https://github.com/evan6007/Trade/blob/main/panbanner.png?raw=true)
 
 # AWS EC2 環境設置與運行指南
