@@ -72,7 +72,7 @@ tmux  # 啟動 Tmux
     ```
 3. **開始運行程式**
     ```sh
-    python your_script.py  # 替換成你的主程式
+    python test_hybird_LTC_sell.py  # 替換成你的主程式
     ```
 4. **把API KEY存IP**
    去幣安 把IP給ＡＰＩ的權限
