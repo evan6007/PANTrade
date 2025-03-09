@@ -229,6 +229,11 @@ while True:
                 premium = (future_price - spot_price) / spot_price
                 print(f"📊 監控溢價: {premium:.2%}")
 
+
+                # **當溢價 = -0.3%~-0.4% 時，執行平倉**
+                if -0.004 <= premium <= -0.003:
+                    send_line_message(f"🎯 溢價 {premium:.2%}")
+
                 # **當溢價 = -0.4% 時，執行平倉**
                 if premium <= exit_premium:
                     print(f"🎯 溢價 {premium:.2%}，執行套利平倉！")
