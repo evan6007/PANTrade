@@ -1,6 +1,3 @@
-![Premium Bread](https://github.com/evan6007/Trade/blob/main/panlogo.png?raw=true)
-
-
 # AWS EC2 環境設置與運行指南
 
 本指南將帶你從零開始在 AWS EC2 上設置環境，並運行程式。
